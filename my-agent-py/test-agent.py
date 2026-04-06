@@ -1,14 +1,13 @@
 # ============================================================
-# 🎫 TICKET & ISSUE RESOLVER AGENT
-# LangGraph + Human-in-the-loop with interrupt()
+# 🎫 TICKET & ISSUE RESOLVER AGENT  — FIXED VERSION
+# LangGraph hand-built ReAct loop + streaming + HITL interrupt
 # ============================================================
-# What you'll see here:
-#   ✅ interrupt() INSIDE tools — pauses graph before real actions
-#   ✅ Command(resume=...) — resumes the graph with human's decision
-#   ✅ User can EDIT fields before approving (not just yes/no)
-#   ✅ Side effects AFTER interrupt — safe, never runs if rejected
-#   ✅ MemorySaver — required for interrupts (state must be checkpointed)
-#   ✅ Full CLI REPL with the approve → resume loop built in
+# What's corrected vs previous version:
+#   ✅ Hand-built ReAct graph (model → tools → model loop) — not create_agent
+#   ✅ stream_mode=["updates","messages"] — streams tokens + tool calls live
+#   ✅ interrupt() inside tools — HITL approval gate
+#   ✅ Command(resume=...) resumes the graph after human decides
+#   ✅ Clean console output: 💭 thinking tokens | 🔧 tool call | ✅ result
 # ============================================================
 
 import json
@@ -18,7 +17,10 @@ from dotenv import load_dotenv
 
 from langchain.chat_models import init_chat_model
 from langchain_core.tools import tool
-from langchain_core.messages import HumanMessage, AIMessage, SystemMessage, ToolMessage
+from langchain_core.messages import (
+    HumanMessage, AIMessage, AIMessageChunk,
+    SystemMessage, ToolMessage
+)
 from langgraph.graph import StateGraph, MessagesState, START, END
 from langgraph.checkpoint.memory import MemorySaver
 from langgraph.types import interrupt, Command
@@ -27,21 +29,18 @@ load_dotenv()
 
 # ────────────────────────────────────────────────────────────
 # 🗃️  MOCK DATABASE
-# In production → your real Postgres / API calls
 # ────────────────────────────────────────────────────────────
 
-TICKETS_DB: dict  = {}
+TICKETS_DB: dict = {}
 MEETINGS_DB: dict = {}
 
 # ────────────────────────────────────────────────────────────
-# 🔧 TOOLS
-# The key pattern: interrupt() is INSIDE the tool.
-# graph pauses here, human approves/edits, then tool continues.
+# 🔧 TOOLS  — interrupt() lives INSIDE the ones that write data
 # ────────────────────────────────────────────────────────────
 
 @tool
 def get_ticket(ticket_id: str) -> str:
-    """Retrieve an existing ticket by its ID (e.g. TKT-A1B2C3)."""
+    """Retrieve an existing ticket by ID (e.g. TKT-A1B2C3)."""
     ticket = TICKETS_DB.get(ticket_id)
     if not ticket:
         return json.dumps({"error": f"Ticket {ticket_id} not found."})
@@ -53,14 +52,15 @@ def create_ticket(title: str, description: str, priority: str = "medium") -> str
     """
     Create a support ticket to track the user's issue.
     priority: 'low' | 'medium' | 'high' | 'critical'
-    Only call this after discussing the issue with the user.
+    Only call this after fully understanding the issue.
     """
-    # ── INTERRUPT ── graph pauses here, state saved to checkpointer
-    # The dict we pass surfaces to the REPL as interrupt_data.
-    # The value returned by interrupt() = whatever Command(resume=...) sends back.
+    # ── INTERRUPT — graph pauses here, state saved to checkpointer ──
+    # Human sees the proposed ticket, can approve / reject / edit fields.
+    # The dict we pass becomes interrupt_data in the REPL.
+    # Whatever Command(resume=...) sends back becomes `decision` here.
     decision = interrupt({
         "action":  "create_ticket",
-        "message": "About to create this ticket. Approve?",
+        "message": "Ready to create this ticket — approve?",
         "details": {
             "title":       title,
             "description": description,
@@ -68,18 +68,15 @@ def create_ticket(title: str, description: str, priority: str = "medium") -> str
         },
     })
 
-    # Human rejected → cancel cleanly, no DB write
     if not decision.get("approved", False):
         return json.dumps({"status": "cancelled", "reason": "Rejected by user."})
 
-    # Side effects ONLY after interrupt() returns with approval.
-    # This is the rule: never write to DB before interrupt().
-    # If the node re-runs on resume, the interrupt fires again first —
-    # so the DB write is protected and only happens once.
+    # ── Side effects ONLY after interrupt returns with approval ──
+    # Safe to write here: interrupt already fired, won't duplicate.
     ticket_id = f"TKT-{uuid.uuid4().hex[:6].upper()}"
     ticket = {
         "id":          ticket_id,
-        "title":       decision.get("title",       title),        # user may have edited
+        "title":       decision.get("title",       title),
         "description": decision.get("description", description),
         "priority":    decision.get("priority",    priority),
         "status":      "open",
@@ -94,12 +91,12 @@ def book_meet(topic: str, preferred_date: str, user_name: str, user_email: str) 
     """
     Book a meeting with a human support engineer.
     preferred_date: e.g. '2025-04-15 14:00'
-    Only use this when the issue genuinely needs human expert involvement.
+    Only use when the issue genuinely needs human expert involvement.
+    Collect user's name and email before calling.
     """
-    # ── INTERRUPT ── same pattern, different action
     decision = interrupt({
         "action":  "book_meet",
-        "message": "About to book this meeting. Approve?",
+        "message": "Ready to book this meeting — approve?",
         "details": {
             "topic":  topic,
             "date":   preferred_date,
@@ -114,10 +111,10 @@ def book_meet(topic: str, preferred_date: str, user_name: str, user_email: str) 
     meet_id = f"MEET-{uuid.uuid4().hex[:6].upper()}"
     meeting = {
         "id":            meet_id,
-        "topic":         decision.get("topic", topic),
-        "date":          decision.get("date",  preferred_date),
-        "name":          decision.get("name",  user_name),
-        "email":         decision.get("email", user_email),
+        "topic":         decision.get("topic",  topic),
+        "date":          decision.get("date",   preferred_date),
+        "name":          decision.get("name",   user_name),
+        "email":         decision.get("email",  user_email),
         "status":        "confirmed",
         "calendar_link": f"https://cal.example.com/{meet_id}",
     }
@@ -129,135 +126,188 @@ TOOLS   = [get_ticket, create_ticket, book_meet]
 TOOLMAP = {t.name: t for t in TOOLS}
 
 # ────────────────────────────────────────────────────────────
-# 🤖 MODEL + SYSTEM PROMPT
+# 🤖 MODEL
 # ────────────────────────────────────────────────────────────
 
 model = init_chat_model("gpt-4.1-nano", temperature=0).bind_tools(TOOLS)
 
-SYSTEM = """You are a friendly and efficient support agent. Your goals:
+SYSTEM = """You are a friendly, efficient support agent.
 
-1. Understand the user's issue through conversation — ask questions first.
-2. Try to resolve it yourself before escalating.
-3. If the issue needs tracking → create_ticket (you must confirm with the user first).
-4. If the issue needs a human expert → book_meet (confirm first, collect their name + email).
-5. Use get_ticket if the user mentions a ticket ID.
+How to work:
+1. Understand the issue through conversation first — ask 1-2 clarifying questions.
+2. Try to resolve it yourself with advice.
+3. If the issue needs tracking → create_ticket (after fully understanding it).
+4. If the user needs a human expert → collect their name + email, then book_meet.
+5. Use get_ticket when a user gives you a ticket ID.
 
-Be warm, concise, and conversational. Don't jump to tools immediately."""
+Be warm, concise, conversational. Never jump straight to creating tickets."""
 
 # ────────────────────────────────────────────────────────────
-# 📐 LANGGRAPH — nodes + edges
+# 📐 LANGGRAPH — hand-built ReAct graph
+# model → should_continue → tools → model (loop) → END
 # ────────────────────────────────────────────────────────────
 
 def call_model(state: MessagesState) -> dict:
-    messages  = [SystemMessage(SYSTEM)] + state["messages"]
-    response  = model.invoke(messages)
+    """LLM node — reads all messages, returns AI response."""
+    messages = [SystemMessage(SYSTEM)] + state["messages"]
+    response = model.invoke(messages)
     return {"messages": [response]}
 
 
 def call_tools(state: MessagesState) -> dict:
-    last    = state["messages"][-1]      # AIMessage with tool_calls
+    """Tool execution node — runs every tool_call in the last AIMessage."""
+    last    = state["messages"][-1]
     results = []
     for tc in last.tool_calls:
         fn  = TOOLMAP[tc["name"]]
-        out = fn.invoke(tc["args"])      # ← interrupt() fires inside here if tool has one
+        out = fn.invoke(tc["args"])   # interrupt() fires inside fn if it has one
         results.append(ToolMessage(
-            content      = str(out),
-            tool_call_id = tc["id"],
-            name         = tc["name"],
+            content=str(out),
+            tool_call_id=tc["id"],
+            name=tc["name"],
         ))
     return {"messages": results}
 
 
 def should_continue(state: MessagesState) -> str:
+    """Routing function — called after every model run."""
     last = state["messages"][-1]
     if isinstance(last, AIMessage) and last.tool_calls:
         return "tools"
     return END
 
 
-# Build graph
 builder = StateGraph(MessagesState)
 builder.add_node("model", call_model)
 builder.add_node("tools", call_tools)
 builder.add_edge(START, "model")
 builder.add_conditional_edges("model", should_continue, {"tools": "tools", END: END})
-builder.add_edge("tools", "model")
+builder.add_edge("tools", "model")   # ← the ReAct loop: tools always go back to model
 
-# MemorySaver is REQUIRED for interrupt() to work.
-# Without a checkpointer, the graph can't save state → can't resume.
-memory = MemorySaver()
+memory = MemorySaver()               # required — interrupt() needs checkpointing
 graph  = builder.compile(checkpointer=memory)
 
 # ────────────────────────────────────────────────────────────
-# 🖥️  DISPLAY HELPERS
+# 🎬 STREAMING DISPLAY
+# stream_mode=["updates","messages"]:
+#   "updates"  → full node results (tool_calls, tool results, final answer)
+#   "messages" → token-by-token from LLM (for live streaming answer)
 # ────────────────────────────────────────────────────────────
 
 BAR = "─" * 60
 
-def show_step(step: dict) -> None:
-    """Print what each graph node produced."""
+def show_chunk(chunk: tuple) -> None:
+    """
+    Handle one streamed chunk from graph.stream().
+    chunk is a (mode, data) tuple when using multiple stream_modes.
+    """
+    mode, data = chunk
 
-    if "model" in step:
-        msg = step["model"]["messages"][-1]
-        if hasattr(msg, "tool_calls") and msg.tool_calls:
-            for tc in msg.tool_calls:
-                print(f"\n  🔧  Calling → {tc['name']}")
-                print(f"      {json.dumps(tc['args'])}")
-        elif msg.content:
-            print(f"\n  🤖  {msg.content}")
+    # ── UPDATES mode: full node completions ─────────────────
+    if mode == "updates":
 
-    elif "tools" in step:
-        for tm in step["tools"]["messages"]:
-            try:
-                data   = json.loads(tm.content)
-                status = data.get("status", "")
-                if status == "cancelled":
-                    print(f"\n  ✗   [{tm.name}] cancelled — {data.get('reason','')}")
-                elif status == "created":
-                    t = data["ticket"]
-                    print(f"\n  ✓   Ticket created → {t['id']} | {t['priority'].upper()} | {t['title']}")
-                elif status == "booked":
-                    m = data["meeting"]
-                    print(f"\n  ✓   Meeting booked → {m['id']} on {m['date']}")
-                    print(f"      Link: {m['calendar_link']}")
-                else:
-                    print(f"\n  ✅  [{tm.name}] → {tm.content[:120]}")
-            except Exception:
-                print(f"\n  ✅  [{tm.name}] → {tm.content[:120]}")
+        if "__interrupt__" in data:
+            # Don't print anything — the REPL loop handles this
+            return
 
+        if "model" in data:
+            msg = data["model"]["messages"][-1]
+            # Show tool call decisions (what the agent chose to call)
+            if hasattr(msg, "tool_calls") and msg.tool_calls:
+                for tc in msg.tool_calls:
+                    args_str = json.dumps(tc["args"])
+                    print(f"\n  🔧  Calling → {tc['name']}")
+                    print(f"      args: {args_str}")
+            # Final answer text is already streamed token-by-token via "messages" mode
+            # so we don't print it again here
+
+        if "tools" in data:
+            for tm in data["tools"]["messages"]:
+                _display_tool_result(tm)
+
+    # ── MESSAGES mode: token-by-token LLM stream ────────────
+    elif mode == "messages":
+        token, metadata = data
+        if not isinstance(token, AIMessageChunk):
+            return
+        # Only stream text tokens for the model node (not tool nodes)
+        if metadata.get("langgraph_node") == "model" and token.content:
+            # Check it's actual text, not a tool_call chunk
+            if isinstance(token.content, str):
+                print(token.content, end="", flush=True)
+            elif isinstance(token.content, list):
+                for block in token.content:
+                    if isinstance(block, dict) and block.get("type") == "text":
+                        print(block.get("text", ""), end="", flush=True)
+
+
+def _display_tool_result(tm: ToolMessage) -> None:
+    """Pretty-print a tool result."""
+    try:
+        data   = json.loads(tm.content)
+        status = data.get("status", "")
+
+        if status == "cancelled":
+            print(f"\n  ✗   [{tm.name}] cancelled — {data.get('reason','')}")
+
+        elif status == "created":
+            t = data["ticket"]
+            print(f"\n  ✓   Ticket created → {t['id']} "
+                  f"| {t['priority'].upper()} | {t['title']}")
+
+        elif status == "booked":
+            m = data["meeting"]
+            print(f"\n  ✓   Meeting booked → {m['id']} on {m['date']}")
+            print(f"      Confirmation link: {m['calendar_link']}")
+
+        elif "error" in data:
+            print(f"\n  ✗   [{tm.name}] {data['error']}")
+
+        else:
+            # get_ticket or other plain results
+            print(f"\n  ✅  [{tm.name}] →")
+            print(f"      {tm.content[:200]}")
+
+    except Exception:
+        print(f"\n  ✅  [{tm.name}] → {tm.content[:150]}")
+
+
+# ────────────────────────────────────────────────────────────
+# ⚠️  INTERRUPT HANDLER
+# Shows the proposed action, collects approve / reject / edit
+# ────────────────────────────────────────────────────────────
 
 def handle_interrupt(payload: dict) -> dict:
     """
-    Show the interrupt payload, collect the human's decision.
-    Returns the dict that becomes the return value of interrupt() inside the tool.
-
+    Called by the REPL when graph.stream() yields an __interrupt__ chunk.
+    Returns the dict that becomes interrupt()'s return value inside the tool.
     Supports:
       y / yes      → approve with original details
       n / no       → reject
-      field=value  → edit a field, then loop back for approval
+      field=value  → edit a field, then loop for confirmation
     """
     action  = payload.get("action", "action")
     message = payload.get("message", "Confirm?")
-    details = dict(payload.get("details", {}))   # mutable copy for edits
+    details = dict(payload.get("details", {}))   # mutable copy
 
     print(f"\n  {'─'*56}")
-    print(f"  ⚠️   APPROVAL NEEDED — {action.replace('_', ' ').upper()}")
+    print(f"  ⚠️   APPROVAL NEEDED — {action.replace('_',' ').upper()}")
     print(f"  {message}")
     print(f"  {'─'*56}")
     for k, v in details.items():
-        print(f"  {k:<15} {v}")
+        print(f"    {k:<16} {v}")
     print(f"  {'─'*56}")
-    print("  [y] approve   [n] reject   [field=value] edit before approving")
+    print("  Commands: [y] approve   [n] reject   [field=value] edit field")
 
     while True:
         raw = input("  Decision ▸ ").strip()
 
         if raw.lower() in ("y", "yes", ""):
-            print("  ✓  Approved.")
+            print("  ✓  Approved.\n")
             return {"approved": True, **details}
 
         elif raw.lower() in ("n", "no"):
-            print("  ✗  Rejected.")
+            print("  ✗  Rejected.\n")
             return {"approved": False}
 
         elif "=" in raw:
@@ -266,66 +316,82 @@ def handle_interrupt(payload: dict) -> dict:
             value = value.strip()
             if field in details:
                 details[field] = value
-                print(f"  ✎  {field} → {value}")
-                print(f"  Updated: {details}")
+                print(f"  ✎  {field} updated → '{value}'")
+                for k, v in details.items():
+                    print(f"    {k:<16} {v}")
             else:
-                print(f"  Unknown field '{field}'. Valid: {list(details.keys())}")
-
+                print(f"  Unknown field. Valid fields: {list(details.keys())}")
         else:
-            print("  Type y, n, or field=value to edit.")
+            print("  Type y, n, or field=value")
+
 
 # ────────────────────────────────────────────────────────────
-# 🔁 THE CORE LOOP — this is what makes HITL work
+# 🔁 CORE TURN RUNNER
+# The while True loop is the HITL engine:
+#   stream → hit interrupt → collect decision → resume → stream again
 # ────────────────────────────────────────────────────────────
 
 def run_turn(user_input: str, config: dict) -> None:
-    """
-    Run one conversation turn, handling interrupt → approve → resume internally.
-
-    The while True loop is the key insight:
-      1. Stream the graph with current_input
-      2. If graph hits interrupt() → collect human decision
-      3. Set current_input = Command(resume=decision) → loop back
-      4. Graph resumes from the exact checkpoint, tool continues
-      5. If no interrupt → graph finished → break
-    """
     print(f"\n{BAR}")
     print(f"  You: {user_input}")
     print(BAR)
 
+    # First iteration uses the user message.
+    # After an interrupt, this becomes Command(resume=decision).
     current_input = {"messages": [HumanMessage(user_input)]}
 
     while True:
         interrupted    = False
         interrupt_data = None
+        answer_started = False
 
-        # Stream this invocation step by step
-        for step in graph.stream(current_input, config, stream_mode="updates"):
+        for chunk in graph.stream(
+            current_input,
+            config,
+            stream_mode=["updates", "messages"],  # both modes simultaneously
+        ):
+            mode, data = chunk
 
-            if "__interrupt__" in step:
-                # interrupt() was called inside a tool.
-                # The graph has saved state and is waiting.
+            # Detect interrupt in updates stream
+            if mode == "updates" and "__interrupt__" in data:
                 interrupted    = True
-                interrupt_data = step["__interrupt__"][0].value
-                # Don't break — consume remaining chunks first
+                interrupt_data = data["__interrupt__"][0].value
+                continue
 
-            else:
-                show_step(step)
+            # Print a newline before the first answer token
+            if mode == "messages":
+                token, meta = data
+                if (isinstance(token, AIMessageChunk)
+                        and meta.get("langgraph_node") == "model"
+                        and token.content
+                        and not answer_started):
+                    # Check it's a text token, not a tool call chunk
+                    is_text = (
+                        isinstance(token.content, str) or
+                        (isinstance(token.content, list) and
+                         any(b.get("type") == "text" for b in token.content
+                             if isinstance(b, dict)))
+                    )
+                    if is_text:
+                        print(f"\n  🤖  ", end="")
+                        answer_started = True
+
+            show_chunk(chunk)
+
+        if answer_started:
+            print()   # newline after streamed answer
 
         if not interrupted:
-            break   # Graph finished cleanly — done with this turn
+            break     # graph reached END cleanly
 
-        # ── HUMAN DECISION ──────────────────────────────────
-        # Graph is paused. Ask the human right now in the terminal.
-        decision = handle_interrupt(interrupt_data)
-
-        # Command(resume=decision) → becomes the return value
-        # of interrupt() inside the tool when graph resumes.
+        # ── Graph paused at interrupt() — ask human now ──────
+        decision      = handle_interrupt(interrupt_data)
         current_input = Command(resume=decision)
+        answer_started = False
+        # Loop back → graph resumes from checkpoint, tool sees decision
 
-        # Loop → graph.stream fires again from the checkpoint.
-        # The tool sees decision and either creates the ticket or cancels.
-        # Then model runs again to tell the user what happened.
+    print()
+
 
 # ────────────────────────────────────────────────────────────
 # 💬 CLI REPL
@@ -333,21 +399,18 @@ def run_turn(user_input: str, config: dict) -> None:
 
 def main():
     print("\n" + "═" * 60)
-    print("  🎫  SUPPORT AGENT  —  LangGraph + Human-in-the-loop")
+    print("  🎫  SUPPORT AGENT — LangGraph ReAct + HITL Interrupts")
     print("═" * 60)
-    print("  Describe your issue. I'll try to help, and ask for")
-    print("  approval before creating tickets or booking meetings.")
+    print("  Describe your issue. The agent will try to help,")
+    print("  and ask for your approval before taking any action.")
     print("  Type 'exit' to quit.\n")
+    print("  Suggested openers:")
+    print("    → My payments keep failing after the last update")
+    print("    → Can you check ticket TKT-ABC123?")
+    print("    → I need to speak to a billing expert\n")
 
-    print("  Try these:")
-    print("    → My login stopped working after your last update")
-    print("    → Check ticket TKT-ABC123")
-    print("    → I need to talk to someone about a billing problem")
-    print()
-
-    # thread_id scopes the memory.
-    # Same ID across turns = agent remembers the full conversation.
-    config = {"configurable": {"thread_id": "support-001"}}
+    # thread_id scopes MemorySaver — same ID = full conversation memory
+    config = {"configurable": {"thread_id": f"support-{uuid.uuid4().hex[:8]}"}}
 
     while True:
         try:
