@@ -1,5 +1,5 @@
 // ============================================================
-// LESSON 3: CHAINS (LCEL — LangChain Expression Language) — TypeScript
+// LESSON 1: CHAINS (LCEL — LangChain Expression Language) — TypeScript
 //
 // KEY DIFFERENCE FROM PYTHON:
 //   Python uses the | pipe operator:  prompt | model | parser

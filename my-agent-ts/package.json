@@ -3,7 +3,8 @@
   "version": "1.0.0",
   "type": "module",
   "scripts": {
-    "chains": "npx tsx 01_chains.ts"
+    "chains": "tsx src/01_chains.ts",
+    "structured": "tsx src/02_structured.ts"
   },
   "keywords": [],
   "author": "",
@@ -22,6 +23,7 @@
     "typescript": "^6.0.2"
   },
   "devDependencies": {
-    "nodemon": "^3.1.14"
+    "nodemon": "^3.1.14",
+    "tsx": "^4.21.0"
   }
 }
