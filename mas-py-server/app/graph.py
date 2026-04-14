@@ -65,7 +65,7 @@ MAX_ITERATIONS = 3  # safety cap on research loops
 class ResearchState(MessagesState):
     research_plan: str  # supervisor's breakdown of the query
     findings: Annotated[list, operator.add]  # [{agent, query, summary, sources: []}]
-    active_statuses: Annotated[dict, operator.ior] # { agent_id: status_dict }
+    active_statuses: Annotated[dict, operator.ior]  # { agent_id: status_dict }
     hitl_data: dict  # Backup of the last interrupt payload for persistent UI
     final_report: str  # markdown report after synthesis
     iterations: Annotated[int, operator.add]  # loop counter
@@ -328,22 +328,23 @@ researcher_b_subagent = create_react_agent(
 # ─────────────────────────────────────────────────────────────────────────────
 
 SUPERVISOR_SYSTEM = """You are the Lead Researcher — a world-class research director who plans, delegates, synthesizes, and decides.
-
-Your research workflow:
-1. PLAN: On first message, think through the research topic. Break it into 2 aspects to investigate in parallel.
-2. DELEGATE: Use ask_researcher_a (web + academic) and ask_researcher_b (patents + news) simultaneously. Give each a specific aspect to investigate with a clear query.
-3. SYNTHESIZE: When both researchers report back, evaluate the findings. Decide: is the research sufficient, or do you need another round?
-4. LOOP (max {max_iter} times): If more depth is needed, delegate again with refined queries targeting gaps.
-5. FINALIZE: When research is complete, synthesize ALL findings into a comprehensive markdown report, then call create_document to trigger HITL for user approval.
-
-Rules:
-- Always delegate to BOTH researchers in parallel when starting or continuing research.
-- Your final report should be well-structured with sections: Executive Summary, Key Findings, Detailed Analysis, Sources.
-- When calling create_document, your report_markdown must be the complete, final report.
-- Think step by step before deciding whether to continue or finalize.
-""".format(
-    max_iter=MAX_ITERATIONS
-)
+ 
+ Your research workflow:
+ 1. PLAN: On first message, think through the research topic. Break it into 2 aspects to investigate in parallel.
+ 2. DELEGATE: Use ask_researcher_a (web + academic) and ask_researcher_b (patents + news) simultaneously. Give each a specific aspect to investigate with a clear query.
+ 3. SYNTHESIZE: When both researchers report back, evaluate the findings. Decide: is the research sufficient, or do you need another round?
+ 4. LOOP (max {max_iter} times): If more depth is needed, delegate again with refined queries targeting gaps.
+ 5. FINALIZE: When research is complete, synthesize ALL findings and call create_document with the full report.
+ 
+ Rules:
+ - Do NOT print the final report in your message content. Only call create_document with the report.
+ - In your message content, only provide a brief status update (e.g., "Research phase complete. Synthesizing final report...")
+ - Always delegate to BOTH researchers in parallel when starting or continuing research.
+ - Your final report should be well-structured with sections: Executive Summary, Key Findings, Detailed Analysis, Sources.
+ - Think step by step before deciding whether to continue or finalize.
+ """.format(
+     max_iter=MAX_ITERATIONS
+ )
 
 
 def supervisor(state: ResearchState) -> dict:
@@ -351,12 +352,33 @@ def supervisor(state: ResearchState) -> dict:
         f"[supervisor] messages={len(state['messages'])}, iterations={state.get('iterations', 0)}"
     )
 
-    messages = [SystemMessage(content=SUPERVISOR_SYSTEM)] + state["messages"]
+    messages_list = state["messages"]
+
+    # ── GUARD: if last ToolMessage is from create_document, just echo it silently ──
+    # This prevents supervisor from generating a new response while HITL is pending
+    # or immediately after approval before user sees the doc card resolve
+    for msg in reversed(messages_list):
+        if hasattr(msg, "name") and msg.name == "create_document":
+            print("[supervisor] Resuming after HITL — passing through silently")
+            # Just relay the tool result as a plain AI message, no new tool calls
+            return {"messages": [AIMessage(content=msg.content)]}
+
+    messages = [SystemMessage(content=SUPERVISOR_SYSTEM)] + messages_list
 
     llm_with_tools = _supervisor_llm.bind_tools(
         [ask_researcher_a, ask_researcher_b, create_document]
     )
     response = llm_with_tools.invoke(messages)
+
+    # ── OVERRIDE: If calling create_document, strip content to keep chat clean ──
+    # This ensures no raw report text 'leaks' into the chat bubble while HITL is pending.
+    if any(
+        tc["name"] == "create_document"
+        for tc in getattr(response, "tool_calls", [])
+    ):
+        print("[supervisor] create_document detected — silencing message content")
+        response.content = "Research phase complete. Finalizing report for approval..."
+
     print(
         f"--- SUPERVISOR: DECISION MADE ({len(response.tool_calls or [])} tool(s) assigned) ---"
     )
@@ -389,7 +411,13 @@ def assign_tool(state: ResearchState):
             case "ask_researcher_b":
                 sends.append(Send("researcher_b", tool_call))
             case "create_document":
-                sends.append(Send("hitl_document", tool_call))
+                # ✅ Inject findings from state so hitl_document can use them
+                enriched = dict(tool_call)
+                enriched["_findings"] = state.get("findings", [])
+                print(
+                    f"[assign_tool] injecting {len(enriched['_findings'])} findings into hitl_document"
+                )
+                sends.append(Send("hitl_document", enriched))
 
     return sends if sends else END
 
@@ -603,82 +631,105 @@ async def hitl_document(tool_call: dict) -> dict:
     filename = args.get("filename", "research_report").replace(" ", "_")
     summary = args.get("summary", "Research complete.")
 
-    print(f"[hitl_document] Starting citation pass, filename={filename}")
+    # ✅ Pull findings injected by assign_tool
+    findings = tool_call.get("_findings", [])
+    print(f"[hitl_document] Starting — filename={filename}, findings={len(findings)}")
 
+    # ── STEP 1: Citation agent runs BEFORE interrupt ─────────────────────────
     writer(
         {
             "active_statuses": {
                 "citation_agent": {
                     "agent": "citation_agent",
-                    "status": "Finalizing citations and structure...",
+                    "status": "Adding citations and references...",
                     "start_time": time.time(),
                 }
             }
         }
     )
 
-    # Run citation agent — get the cited version of the report
-    # We pass an empty findings list here; in a full implementation you'd
-    # thread the findings through state. The citation agent works on URLs
-    # already embedded in the report by the supervisor.
-    cited_report = await citation_agent(raw_report, [])
+    cited_report = await citation_agent(raw_report, findings)  # ✅ real findings!
 
     writer(
         {
             "active_statuses": {
                 "citation_agent": {
                     "agent": "citation_agent",
-                    "status": "Complete: Citations validated.",
+                    "status": "Complete: Citations inserted.",
                     "is_done": True,
                 }
             }
         }
     )
 
-    print(f"[hitl_document] Interrupting for HITL approval")
+    print(f"[hitl_document] Citation done. Interrupting for HITL approval.")
 
-    # ── HITL PAUSE ──────────────────────────────────────────────────────────
+    # ── STEP 2: Show user the CITED preview for approval ────────────────────
     hitl_payload = {
         "type": "document_approval",
-        "message": "Research is complete. Review the summary below and approve to download the report.",
+        "message": "Research complete. Citations have been added. Review and approve to download.",
         "summary": summary,
         "filename": filename,
         "report_preview": (
-            cited_report[:1000] + "..."
-            if len(cited_report) > 1000
-            else cited_report
+            cited_report[:1000] + "..." if len(cited_report) > 1000 else cited_report
         ),
         "word_count": len(cited_report.split()),
+        "citations_added": True,  # ✅ UI can show "citations ready" badge
     }
 
-    # Store in state for UI persistence
     writer({"hitl_data": hitl_payload})
+    print(f"[hitl_document] Interrupt triggered. Waiting for approval...")
 
+    # ── BREAKPOINT ───────────────────────────────────────────────────────────
     approval = interrupt(hitl_payload)
-    # ── RESUME POINT ─────────────────────────────────────────────────────────
+    # ── RESUME ───────────────────────────────────────────────────────────────
 
-    print(f"[hitl_document] Resumed with approval={approval}")
+    print(f"[hitl_document] Resumed. Approval value: {approval}")
 
-    if approval == "approve":
-        # Write the .docx file
+    # ── STEP 3: On approve → write docx with cited report ───────────────────
+    if str(approval).lower() == "approve":
+        # Signal to frontend: doc rendering has started
+        writer(
+            {
+                "active_statuses": {
+                    "doc_render": {
+                        "agent": "doc_render",
+                        "status": "rendering",  # ← your frontend watches this
+                        "filename": filename,
+                        "start_time": time.time(),
+                    }
+                }
+            }
+        )
+
         output_path = f"/tmp/{filename}.docx"
         success = await _write_docx(cited_report, filename, output_path)
 
-        if success:
-            content = (
-                f"✅ Research report created successfully!\n"
-                f"File: {filename}.docx\n"
-                f"Path: {output_path}\n"
-                f"Word count: {len(cited_report.split())}\n"
-                f"The document is ready for download."
-            )
-        else:
-            content = "⚠️ Report was approved but document creation failed. The cited report text is available."
-    else:
-        content = (
-            f"❌ Document creation cancelled. "
-            f"You can ask me to refine the research or recreate the document."
+        writer(
+            {
+                "active_statuses": {
+                    "doc_render": {
+                        "agent": "doc_render",
+                        "status": "complete",
+                        "filename": filename,
+                        "path": output_path,
+                        "is_done": True,
+                    }
+                }
+            }
         )
+
+        content = (
+            (
+                f"✅ Report ready: {filename}.docx\n"
+                f"Path: {output_path}\n"
+                f"Words: {len(cited_report.split())}"
+            )
+            if success
+            else "⚠️ Approval received but docx creation failed."
+        )
+    else:
+        content = "❌ Cancelled. Ask me to refine or recreate the report."
 
     return {
         "messages": [

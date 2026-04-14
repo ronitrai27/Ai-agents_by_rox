@@ -176,6 +176,13 @@ async def agent_endpoint(request: Request):
                         f"[generate_events] message chunk from node={node_name}, type={type(msg).__name__}"
                     )
 
+                    # ── GUARD: Skip streaming internal messages from HITL node ──
+                    # This prevents citation_agent's internal LLM call from appearing
+                    # as a chat bubble while the approval card is pending.
+                    if node_name == "hitl_document":
+                        print(f"[generate_events] node={node_name} is HITL, skipping message stream")
+                        continue
+
                     if isinstance(msg, AIMessageChunk):
                         has_content = bool(msg.content or msg.tool_call_chunks)
                         if has_content:

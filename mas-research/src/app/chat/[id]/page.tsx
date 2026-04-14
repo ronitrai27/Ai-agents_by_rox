@@ -15,12 +15,14 @@ import {
 import { ChatbotNode } from "@/components/ai/ChatbotNode";
 import ApprovalCard from "@/components/ai/ApprovalCard";
 import { ResearchAgentNode } from "@/components/ai/ResearchAgentNode";
+import { DocumentStatusCard } from "@/components/ai/DocumentStatusCard";
+import { ReportResultCard } from "@/components/ai/ReportResultCard";
 import { useLangGraphAgent } from "@/lib/langGraph/useLangGraphAgent";
 
 const RESEARCH_EXAMPLES = [
-  "Research the impact of AI on the current job market 2024",
-  "Latest breakthroughs in solid state batteries and major patent holders",
-  "Find academic papers on zero-knowledge proofs in healthcare",
+  "Research the impact of AI on the current job market 2026",
+  "Latest breakthroughs in AI , create a doc for it.",
+  "Create a doc with proper citations for MCP servers",
   "Report on the commercial space flight competition (SpaceX vs Blue Origin)",
 ];
 
@@ -97,9 +99,15 @@ export default function ResearchChatPage() {
         if (!node.state.active_statuses) return null;
         return (
           <div className="space-y-1">
-            {Object.entries(node.state.active_statuses).map(([agentId, data]) => (
-              <ResearchAgentNode key={agentId} agentId={agentId} statusData={data} />
-            ))}
+            {Object.entries(node.state.active_statuses).map(
+              ([agentId, data]) => (
+                <ResearchAgentNode
+                  key={agentId}
+                  agentId={agentId}
+                  statusData={data}
+                />
+              ),
+            )}
           </div>
         );
       case "hitl_document":
@@ -107,12 +115,27 @@ export default function ResearchChatPage() {
         const isActuallyDone = !!checkpoint.state.final_report;
         const interrupt = checkpoint.interruptValue;
         const hitlData = interrupt || (checkpoint.state as any).hitl_data;
-        
-        // 2. Also check for a final response message from this node
-        const hasMessages = !!node.state.messages && node.state.messages.length > 0;
+        const report = checkpoint.state.final_report;
+        const filename =
+          (checkpoint.state as any).filename ||
+          hitlData?.filename ||
+          "research_report";
+
+        // 2. Check for active statuses (Rendering, Citations)
+        const activeStatuses = node.state.active_statuses || {};
+
+        // 3. Check for a final response message from this node
+        const hasMessages =
+          !!node.state.messages && node.state.messages.length > 0;
 
         return (
-          <div className="space-y-4">
+          <div className="space-y-2">
+            {/* Show any ongoing or completed document statuses */}
+            {Object.entries(activeStatuses).map(([agentId, data]) => (
+              <DocumentStatusCard key={agentId} statusData={data as any} />
+            ))}
+
+            {/* Approval protocol card */}
             {hitlData && (
               <ApprovalCard
                 interruptValue={hitlData}
@@ -120,6 +143,13 @@ export default function ResearchChatPage() {
                 onResume={handleResume}
               />
             )}
+
+            {/* If done, show the proper Doc preview */}
+            {isActuallyDone && report && (
+              <ReportResultCard report={report} filename={filename} />
+            )}
+
+            {/* Fallback to simple messages if any */}
             {hasMessages && <ChatbotNode nodeState={node.state} />}
           </div>
         );
@@ -143,7 +173,7 @@ export default function ResearchChatPage() {
       {/* Messages */}
       <div ref={containerRef} className="flex-1 overflow-y-auto p-4">
         <div className="max-w-4xl mx-auto">
-          {appCheckpoints.map((checkpoint) =>
+          {appCheckpoints.map((checkpoint, cpIndex) =>
             checkpoint.error ? (
               <div
                 key={checkpoint.checkpointConfig.configurable.checkpoint_id}
@@ -153,15 +183,30 @@ export default function ResearchChatPage() {
               </div>
             ) : (
               checkpoint.nodes.map((node, i) => {
-                // If it's the first checkpoint and has messages, we show the User's input first
-                const isFirstCheckpoint = appCheckpoints.indexOf(checkpoint) === 0 && i === 0;
-                const userMessages = isFirstCheckpoint ? checkpoint.state.messages?.filter(m => m.type === 'human') : [];
-                
+                const prevCheckpoint =
+                  cpIndex > 0 ? appCheckpoints[cpIndex - 1] : null;
+
+                const userMessages =
+                  checkpoint.state.messages?.filter((m) => {
+                    const isUser = m.type === "human" || m.type === "user";
+                    if (!isUser) return false;
+                    if (!prevCheckpoint) return true;
+                    return !prevCheckpoint.state.messages.some(
+                      (pm) => pm.id === m.id,
+                    );
+                  }) || [];
+
                 return (
-                  <div key={`${checkpoint.checkpointConfig.configurable.checkpoint_id}-${i}`}>
-                    {userMessages?.map((m, idx) => (
-                      <ChatbotNode key={`user-${idx}`} nodeState={{ messages: [m] }} />
-                    ))}
+                  <div
+                    key={`${checkpoint.checkpointConfig.configurable.checkpoint_id}-${i}`}
+                  >
+                    {i === 0 &&
+                      userMessages?.map((m, idx) => (
+                        <ChatbotNode
+                          key={`user-${idx}`}
+                          nodeState={{ messages: [m] }}
+                        />
+                      ))}
                     {renderNode(checkpoint, node)}
                   </div>
                 );
