@@ -43,9 +43,10 @@
  
 <div align="center">
 
+ ![App 3](assets/app3.png) 
  ![App 1](assets/app1.png) 
  ![App 2](assets/app2.png) 
- ![App 3](assets/app3.png) 
+
  
 </div>
 ---
@@ -119,7 +120,53 @@ agents/
 ├── requirements.txt
 └── tools_reference_card.html
 ```
-
+## 💡 Key Concepts — For the Curious
+ 
+<details>
+<summary><b>🧠 What is a LangGraph StateGraph?</b></summary>
+LangGraph models agents as directed graphs. Each **node** is a function that processes state. Each **edge** defines which node runs next — and edges can be **conditional**, meaning the agent decides its own path.
+ 
+```python
+graph = StateGraph(AgentState)
+graph.add_node("reason", reasoning_node)
+graph.add_node("act", tool_node)
+graph.add_conditional_edges("reason", should_continue, {
+    "continue": "act",
+    "end": END
+})
+```
+ 
+</details>
+<details>
+<summary><b>⏸️ What is Human-in-the-Loop (HITL)?</b></summary>
+LangGraph can **interrupt** graph execution at any node, wait for human input, then **resume** from exactly where it stopped. State is fully preserved. This is how you build agents that ask for approval before taking irreversible actions.
+ 
+```python
+graph.add_node("refund_approval", interrupt(refund_node))
+# Graph pauses here → Human approves → Graph resumes
+```
+ 
+</details>
+<details>
+<summary><b>🔄 What is a REACT Agent?</b></summary>
+**Re**ason + **Act** — a loop where the agent:
+1. Reasons about what tool to call
+2. Calls the tool
+3. Observes the result
+4. Reasons about next steps
+5. Repeats until done
+Not one shot. Not a chain. A **loop** with real decision-making.
+ 
+</details>
+<details>
+<summary><b>🌊 Why raw SSE instead of the SDK?</b></summary>
+The LangChain/LangGraph streaming SDKs are powerful — but they hide what's happening. Writing raw SSE means:
+- You control every event that reaches the client
+- You understand exactly what data flows and when
+- You can customize the stream format for your UI
+- No magic. No black boxes. **Full understanding.**
+</details>
+---
 
 # 🧩 Part 1 — `my-agent-ts` & `my-agent-py`
  
@@ -411,53 +458,7 @@ Browser                Next.js              FastAPI              LangGraph
 **Zero SDK wrapping the stream. Zero abstraction hiding the events.**
 Raw `text/event-stream`. Raw `ReadableStream`. Raw power.
 
-## 💡 Key Concepts — For the Curious
- 
-<details>
-<summary><b>🧠 What is a LangGraph StateGraph?</b></summary>
-LangGraph models agents as directed graphs. Each **node** is a function that processes state. Each **edge** defines which node runs next — and edges can be **conditional**, meaning the agent decides its own path.
- 
-```python
-graph = StateGraph(AgentState)
-graph.add_node("reason", reasoning_node)
-graph.add_node("act", tool_node)
-graph.add_conditional_edges("reason", should_continue, {
-    "continue": "act",
-    "end": END
-})
-```
- 
-</details>
-<details>
-<summary><b>⏸️ What is Human-in-the-Loop (HITL)?</b></summary>
-LangGraph can **interrupt** graph execution at any node, wait for human input, then **resume** from exactly where it stopped. State is fully preserved. This is how you build agents that ask for approval before taking irreversible actions.
- 
-```python
-graph.add_node("refund_approval", interrupt(refund_node))
-# Graph pauses here → Human approves → Graph resumes
-```
- 
-</details>
-<details>
-<summary><b>🔄 What is a REACT Agent?</b></summary>
-**Re**ason + **Act** — a loop where the agent:
-1. Reasons about what tool to call
-2. Calls the tool
-3. Observes the result
-4. Reasons about next steps
-5. Repeats until done
-Not one shot. Not a chain. A **loop** with real decision-making.
- 
-</details>
-<details>
-<summary><b>🌊 Why raw SSE instead of the SDK?</b></summary>
-The LangChain/LangGraph streaming SDKs are powerful — but they hide what's happening. Writing raw SSE means:
-- You control every event that reaches the client
-- You understand exactly what data flows and when
-- You can customize the stream format for your UI
-- No magic. No black boxes. **Full understanding.**
-</details>
----
+
 
 ---
  
