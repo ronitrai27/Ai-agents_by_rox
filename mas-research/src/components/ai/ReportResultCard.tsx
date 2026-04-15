@@ -2,7 +2,14 @@
 
 import { useState } from "react";
 import { cn } from "@/lib/utils";
-import { Copy, Check, FileText, ChevronDown, ChevronUp } from "lucide-react";
+import {
+  Copy,
+  Check,
+  FileText,
+  ChevronDown,
+  ChevronUp,
+  Download,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -23,7 +30,7 @@ export function ReportResultCard({ report, filename }: ReportResultCardProps) {
   };
 
   return (
-    <div className="my-6 border border-neutral-800 bg-neutral-900/10 font-mono shadow-2xl">
+    <div className="my-6 border border-neutral-800 bg-neutral-950 font-mono shadow-xl rounded-xl">
       <div className="flex items-center justify-between p-4 bg-neutral-900/40 border-b border-neutral-800">
         <div className="flex items-center gap-3">
           <div className="bg-emerald-500/10 p-2 rounded border border-emerald-500/20">
@@ -38,36 +45,55 @@ export function ReportResultCard({ report, filename }: ReportResultCardProps) {
             </div>
           </div>
         </div>
-        
+
         <div className="flex gap-2">
           <Button
             variant="ghost"
             size="sm"
             className={cn(
               "h-8 text-[10px] uppercase border px-3 rounded-none transition-all duration-300",
-              copied ? "border-emerald-500 text-emerald-500" : "border-neutral-700 text-neutral-400 hover:border-neutral-500"
+              copied
+                ? "border-emerald-500 text-emerald-500"
+                : "border-neutral-700 text-neutral-400 hover:border-neutral-500",
             )}
             onClick={handleCopy}
           >
             {copied ? (
-              <><Check className="w-3 h-3 mr-2" /> Copied</>
+              <>
+                <Check className="w-3 h-3 mr-2" /> Copied
+              </>
             ) : (
-              <><Copy className="w-3 h-3 mr-2" /> Copy Markdown</>
+              <>
+                <Copy className="w-3 h-3 mr-2" /> Copy Markdown
+              </>
             )}
+          </Button>
+
+          <Button
+            variant="default"
+            size="sm"
+            className={cn(
+              "h-8 text-[10px] uppercase border px-3 rounded-none transition-all duration-300",
+              copied
+                ? "border-emerald-500 text-emerald-500"
+                : "border-neutral-700 text-neutral-400 hover:border-neutral-500",
+            )}
+          >
+            Download <Download />
           </Button>
         </div>
       </div>
 
-      <div className={cn(
-        "relative overflow-hidden transition-all duration-700",
-        isExpanded ? "max-h-[2000px]" : "max-h-[400px]"
-      )}>
+      <div
+        className={cn(
+          "relative overflow-hidden transition-all duration-700",
+          isExpanded ? "max-h-[2000px]" : "max-h-[400px]",
+        )}
+      >
         <div className="p-6 prose prose-invert prose-sm max-w-none text-neutral-300 prose-headings:text-neutral-100 prose-headings:uppercase prose-headings:tracking-tighter prose-strong:text-emerald-400/80">
-          <ReactMarkdown remarkPlugins={[remarkGfm]}>
-            {report}
-          </ReactMarkdown>
+          <ReactMarkdown remarkPlugins={[remarkGfm]}>{report}</ReactMarkdown>
         </div>
-        
+
         {!isExpanded && (
           <div className="absolute bottom-0 left-0 right-0 h-32 bg-gradient-to-t from-neutral-950 to-transparent flex items-end justify-center pb-4">
             <Button

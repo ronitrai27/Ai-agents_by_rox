@@ -33,15 +33,18 @@ from langgraph.config import get_stream_writer
 from langgraph.checkpoint.memory import InMemorySaver
 from tavily import TavilyClient
 import serpapi
+from mem0 import MemoryClient
 from dotenv import load_dotenv
 
 load_dotenv()
 
 _tavily = TavilyClient(api_key=os.environ["TAVILY_API_KEY"])
 _serp_client = serpapi.Client(api_key=os.environ["SERPAPI_API_KEY"])
+_mem0 = MemoryClient()  # uses MEM0_API_KEY from env
 
 print(f"[init] Tavily client ready")
 print(f"[init] SerpAPI client ready: {os.environ['SERPAPI_API_KEY'][:8]}...")
+print(f"[init] Mem0 client ready")
 
 MAX_ITERATIONS = 3
 
@@ -62,6 +65,7 @@ class ResearchState(MessagesState):
     hitl_data: dict  # Backup of the last interrupt payload for persistent UI
     final_report: str  # markdown report after synthesis
     iterations: Annotated[int, operator.add]  # loop counter
+    user_id: str
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -134,28 +138,36 @@ def serp_scholar_search(query: str) -> dict:
 @tool
 def serp_patent_search(query: str) -> dict:
     """Search Google Patents for patents related to the research topic.
-    Use when researching technology, inventions, or IP landscape."""
+    Use when researching technology, inventions, or IP landscape.
+
+    IMPORTANT: query must be short, technical keywords only (3-6 words).
+    Good: "propulsion electromagnetic field control"
+    Bad: "patents related to alien technology or UFOs"""
     print(f"[serp_patent_search] ▶ CALLED — query={query}")
-    data = _serp_client.search(
-        {
-            "engine": "google_patents",
-            "q": query,
-            "num": 5,
-        }
-    )
-    results = [
-        {
-            "title": r.get("title", ""),
-            "patent_id": r.get("patent_id", ""),
-            "link": r.get("pdf", ""),
-            "assignee": r.get("assignee", ""),
-            "filing_date": r.get("filing_date", ""),
-            "snippet": r.get("snippet", ""),
-        }
-        for r in data.get("organic_results", [])
-    ]
-    print(f"[serp_patent_search] ✓ DONE — {len(results)} results")
-    return {"query": query, "results": results}
+    try:
+        data = _serp_client.search(
+            {
+                "engine": "google_patents",
+                "q": query,
+                "num": 5,
+            }
+        )
+        results = [
+            {
+                "title": r.get("title", ""),
+                "patent_id": r.get("patent_id", ""),
+                "link": r.get("pdf", ""),
+                "assignee": r.get("assignee", ""),
+                "filing_date": r.get("filing_date", ""),
+                "snippet": r.get("snippet", ""),
+            }
+            for r in data.get("organic_results", [])
+        ]
+        print(f"[serp_patent_search] ✓ DONE — {len(results)} results")
+        return {"query": query, "results": results}
+    except Exception as e:
+        print(f"[serp_patent_search] ✗ ERROR: {e}")
+        return {"query": query, "results": [], "error": str(e)}
 
 
 @tool
@@ -303,31 +315,47 @@ def supervisor(state: ResearchState) -> dict:
         f"[supervisor] messages={len(state['messages'])}, iterations={state.get('iterations', 0)}"
     )
 
+    user_id = state.get("user_id", "default_user")
     messages_list = state["messages"]
 
-    # ── GUARD: if last ToolMessage is from create_document, just echo it silently ──
-    # This prevents supervisor from generating a new response while HITL is pending
-    # or immediately after approval before user sees the doc card resolve
+    # ── GUARD: passthrough after HITL ──
     for msg in reversed(messages_list):
         if hasattr(msg, "name") and msg.name == "create_document":
             print("[supervisor] Resuming after HITL — passing through silently")
-            # Just relay the tool result as a plain AI message, no new tool calls
             return {"messages": [AIMessage(content=msg.content)]}
 
-    messages = [SystemMessage(content=SUPERVISOR_SYSTEM)] + messages_list
+    # ── FETCH memory for this user ──
+    last_query = messages_list[-1].content if messages_list else ""
+    memories = _mem0.search(last_query, user_id=user_id)
+    memory_context = "\n".join(f"- {m['memory']}" for m in memories.get("results", []))
+    memory_block = (
+        f"\nWhat you know about this user:\n{memory_context}\n"
+        if memory_context
+        else ""
+    )
+
+    messages = [SystemMessage(content=SUPERVISOR_SYSTEM + memory_block)] + messages_list
 
     llm_with_tools = _supervisor_llm.bind_tools(
         [ask_researcher_a, ask_researcher_b, create_document]
     )
     response = llm_with_tools.invoke(messages)
 
-    # ── OVERRIDE: If calling create_document, strip content to keep chat clean ──
-    # This ensures no raw report text 'leaks' into the chat bubble while HITL is pending.
     if any(
         tc["name"] == "create_document" for tc in getattr(response, "tool_calls", [])
     ):
         print("[supervisor] create_document detected — silencing message content")
         response.content = "Research phase complete. Finalizing report for approval..."
+
+    # ── SAVE this interaction to memory ──
+    if messages_list and response.content:
+        _mem0.add(
+            [
+                {"role": "user", "content": last_query},
+                {"role": "assistant", "content": response.content},
+            ],
+            user_id=user_id,
+        )
 
     print(
         f"--- SUPERVISOR: DECISION MADE ({len(response.tool_calls or [])} tool(s) assigned) ---"
