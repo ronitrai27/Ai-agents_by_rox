@@ -46,6 +46,7 @@
  ![App 3](assets/app3.png) 
  ![App 1](assets/app1.png) 
  ![App 2](assets/app2.png) 
+ ![App 4](assets/app4.png) 
 
  
 </div>
@@ -149,7 +150,7 @@ graph.add_node("refund_approval", interrupt(refund_node))
 </details>
 <details>
 <summary><b>🔄 What is a REACT Agent?</b></summary>
-**Re**ason + **Act** — a loop where the agent:
+**Reason** + **Act** — a loop where the agent:
 1. Reasons about what tool to call
 2. Calls the tool
 3. Observes the result
@@ -193,9 +194,18 @@ NEXT_PUBLIC_AGENT_URL=http://127.0.0.1:8000  (change as per your domain)
  
 > A production-pattern customer support agent backed by a fake DB — real graph, real interrupt logic, sandboxed data.
 
-# 🔑 Environment Variables
+# 🔑 Setup & Environment Variables
 
 ```bash
+-- How to set up  (server side)--
+poetry init
+poetry install 
+poetry run python server.py
+
+-- How to set up  (client side)--
+pnpm install
+pnpm dev
+
 -- server side
 # LangSmith — Observability
 LANGSMITH_TRACING=true
@@ -295,9 +305,20 @@ update_order  → supervisor
  
 > 4-agent research MAS. Real tool calls. Real sources. Cited report. Downloadable `.docx`. Max `MAX_ITERATIONS=3` research loops before forced synthesis.
 
-# 🔑 Environment Variables
+# 🔑 Setup & Environment Variables
 
 ```bash
+
+-- How to set up  (server side)--
+poetry init
+poetry install 
+poetry run python server.py
+
+-- How to set up  (client side)--
+pnpm install
+pnpm dev
+
+
 -- server side
 # LangSmith — Observability
 LANGSMITH_TRACING=true

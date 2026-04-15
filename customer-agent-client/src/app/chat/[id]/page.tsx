@@ -10,7 +10,13 @@ import {
   ArrowDown,
   Ellipsis,
   AlertTriangle,
+  Shield,
+  Activity,
+  Terminal,
+  Settings,
+  ChevronLeft,
 } from "lucide-react";
+import { cn } from "@/lib/utils";
 import { AppCheckpoint, GraphNode } from "@/lib/langGraph/types";
 import {
   AgentState,
@@ -22,7 +28,7 @@ import ApprovalCard from "@/components/ai/ApprovalCard";
 import { useLangGraphAgent } from "@/lib/langGraph/useLangGraphAgent";
 
 import { OrderAgentNode } from "@/components/ai/OrderAgentNode";
-// TODO: import RefundAgentNode — eligibility result + refund confirmation card
+import { RefundAgentNode } from "@/components/ai/RefundAgentNode";
 
 const EXAMPLE_MESSAGES = [
   "What is the status of order ORD-001?",
@@ -108,9 +114,7 @@ export default function ChatPage() {
         return <OrderAgentNode nodeState={node.state} />;
 
       case "refund_agent":
-        // TODO: return <RefundAgentNode nodeState={node.state} />
-        // Show: eligibility result, then refund confirmation card
-        return null;
+        return <RefundAgentNode nodeState={node.state} />;
 
       case "update_order":
         // HITL — only renders when graph is paused waiting for approval
@@ -130,10 +134,67 @@ export default function ChatPage() {
   const isDisabled = status === "running" || restoring;
 
   return (
-    <div className="flex flex-col h-screen bg-neutral-200">
-      {/* Messages */}
-      <div ref={containerRef} className="flex-1 overflow-y-auto px-4">
-        <div className="space-y-2 max-w-2xl mx-auto w-full py-4">
+    <div className="flex flex-col h-screen bg-neutral-100 text-slate-900 font-mono">
+      <header className="flex-shrink-0 bg-white border-b border-slate-200 px-6 py-3 flex items-center justify-between shadow-sm z-20">
+        <div className="flex items-center gap-4">
+          <h1 className="text-lg font-sans font-bold tracking-tight">
+            ROX - Customer Agent
+          </h1>
+          <div className="h-4 w-px bg-slate-200" />
+
+          <div className="flex items-center gap-2 text-slate-500">
+            <Activity className="w-4 h-4" />
+            <div className="flex flex-col">
+              <span className="text-[9px] uppercase tracking-tighter leading-none text-slate-400">
+                System Status
+              </span>
+              <span
+                className={cn(
+                  "text-[10px] font-bold uppercase",
+                  status === "running" ? "text-amber-500" : "text-emerald-500",
+                )}
+              >
+                {status === "running" ? "Executing..." : "Ready"}
+              </span>
+            </div>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-6">
+          <div className="hidden md:flex flex-col items-end">
+            <span className="text-[9px] text-slate-400 uppercase tracking-tighter">
+              Current Session
+            </span>
+            <span className="text-[10px] font-bold text-slate-600">
+              {threadId?.slice(0, 12)}
+            </span>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-8 w-8 text-slate-400"
+            >
+              <Settings className="w-4 h-4" />
+            </Button>
+          </div>
+        </div>
+      </header>
+
+      {/* Messages Viewport */}
+      <div
+        ref={containerRef}
+        className="flex-1 overflow-y-auto scrollbar-thin scrollbar-thumb-slate-200"
+      >
+        <div className="max-w-4xl mx-auto w-full px-6 py-10 space-y-8">
+          {/* System Welcome Message (Sticky at top of history) */}
+          <div className="flex items-center gap-2 text-[10px] text-slate-400 justify-center mb-10">
+            <Terminal className="w-3 h-3" />
+            <span className="uppercase tracking-[0.2em]">
+              Secure Session Initialized // v2.4.0
+            </span>
+          </div>
           {appCheckpoints.map((checkpoint) =>
             checkpoint.error ? (
               <div
@@ -178,24 +239,25 @@ export default function ChatPage() {
         </div>
       </div>
 
-      {/* Scroll to bottom */}
+      {/* Floating Scroll Button */}
       {showScrollButton && (
         <Button
-          className="fixed bottom-28 right-8 rounded-full shadow-md"
+          className="fixed bottom-32 right-10 rounded-full shadow-xl animate-in fade-in zoom-in slide-in-from-bottom-2"
           size="icon"
-          variant="outline"
+          variant="secondary"
           onClick={() =>
             messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })
           }
         >
-          <ArrowDown />
+          <ArrowDown className="w-5 h-5" />
         </Button>
       )}
 
-      {/* Input */}
-      <div className="flex-shrink-0 p-2 pb-4">
-        <div className="max-w-2xl mx-auto space-y-2">
-          <div className="grid grid-cols-2 gap-2">
+      {/* Modernized Input Footer */}
+      <footer className="flex-shrink-0 p-6 bg-gradient-to-t from-white via-white to-transparent pb-8">
+        <div className="max-w-4xl mx-auto">
+          {/* Quick Actions */}
+          <div className="flex flex-wrap gap-2 mb-4 justify-center">
             {EXAMPLE_MESSAGES.map((msg) => (
               <Button
                 key={msg}
@@ -203,18 +265,21 @@ export default function ChatPage() {
                 size="sm"
                 onClick={() => sendMessage(msg)}
                 disabled={isDisabled}
-                className="text-xs font-mono w-full truncate"
+                className="text-[10px] font-bold uppercase tracking-wider h-8 bg-white/50 backdrop-blur border-slate-200 hover:bg-slate-900 hover:text-white transition-all shadow-sm"
               >
                 {msg}
               </Button>
             ))}
           </div>
 
-          <div className="relative">
+          <div className="group relative bg-white rounded-xl border border-slate-300 shadow-lg focus-within:border-slate-900 focus-within:ring-4 focus-within:ring-slate-900/5 transition-all overflow-hidden">
+            <div className="absolute left-4 top-4 text-slate-300">
+              <Terminal className="w-5 h-5" />
+            </div>
             <Textarea
               ref={inputRef}
-              className="pr-24 resize-none font-mono border bg-neutral-50"
-              placeholder="Ask about an order, refund, or status update..."
+              className="w-full min-h-[60px] pl-12 pr-24 py-4 resize-none border-none focus-visible:ring-0 bg-transparent text-sm"
+              placeholder="System command or query..."
               value={inputValue}
               disabled={isDisabled}
               onChange={(e) => setInputValue(e.target.value)}
@@ -226,32 +291,42 @@ export default function ChatPage() {
                 }
               }}
             />
-            {status === "running" ? (
-              <Button
-                className="absolute right-3 top-1/2 -translate-y-1/2"
-                size="icon"
-                variant="destructive"
-                onClick={() => stop(threadId)}
-              >
-                <Square className="h-4 w-4" />
-              </Button>
-            ) : (
-              <Button
-                className="absolute right-3 top-1/2 -translate-y-1/2"
-                size="icon"
-                variant="outline"
-                disabled={!inputValue.trim() || restoring}
-                onClick={() => {
-                  sendMessage(inputValue);
-                  setInputValue("");
-                }}
-              >
-                <ArrowUp className="h-4 w-4" />
-              </Button>
-            )}
+
+            <div className="absolute right-3 bottom-3 flex items-center gap-2">
+              {status === "running" ? (
+                <Button
+                  className="rounded-xl h-10 w-10 shadow-lg"
+                  size="icon"
+                  variant="destructive"
+                  onClick={() => stop(threadId)}
+                >
+                  <Square className="h-4 w-4" />
+                </Button>
+              ) : (
+                <Button
+                  className="rounded-xl h-10 w-10 shadow-lg bg-slate-900 hover:bg-slate-800"
+                  size="icon"
+                  disabled={!inputValue.trim() || restoring}
+                  onClick={() => {
+                    sendMessage(inputValue);
+                    setInputValue("");
+                  }}
+                >
+                  <ArrowUp className="h-5 h-5" />
+                </Button>
+              )}
+            </div>
+          </div>
+
+          <div className="mt-3 flex items-center justify-center gap-4 text-[9px] text-slate-400 uppercase tracking-widest font-bold">
+            <span>LangGraph Core</span>
+            <span className="w-1 h-1 rounded-full bg-slate-200" />
+            <span>Subagent Mesh</span>
+            <span className="w-1 h-1 rounded-full bg-slate-200" />
+            <span>GPT-4o Optimized</span>
           </div>
         </div>
-      </div>
+      </footer>
     </div>
   );
 }

@@ -150,26 +150,33 @@ def format_state_snapshot(snapshot):
 
 
 def _serialize_message(msg) -> dict:
-    print(
-        f"[_serialize_message] type={type(msg).__name__}, id={getattr(msg, 'id', None)}"
-    )
+    original_type = msg.__class__.__name__
+
+    # Map LangChain class names to standard lowercase types used by frontend
+    if "Human" in original_type:
+        type_str = "human"
+    elif "AI" in original_type:
+        type_str = "ai"
+    elif "Tool" in original_type:
+        type_str = "tool"
+    elif "System" in original_type:
+        type_str = "system"
+    else:
+        type_str = original_type.lower().replace("message", "")
+
+    print(f"[_serialize_message] mapped {original_type} -> {type_str}")
+
     base: dict = {
-        "type": msg.__class__.__name__,
+        "type": type_str,
         "content": msg.content if isinstance(msg.content, str) else str(msg.content),
         "id": getattr(msg, "id", None),
     }
     if getattr(msg, "tool_calls", None):
-        print(
-            f"[_serialize_message] Has tool_calls: {[t.get('name') for t in msg.tool_calls]}"
-        )
         base["tool_calls"] = [
             {"name": t.get("name"), "args": t.get("args", {}), "id": t.get("id")}
             for t in msg.tool_calls
         ]
     if getattr(msg, "tool_call_id", None):
-        print(
-            f"[_serialize_message] Is tool result: tool_call_id={msg.tool_call_id}, name={getattr(msg, 'name', None)}"
-        )
         base["tool_call_id"] = msg.tool_call_id
         base["name"] = getattr(msg, "name", None)
     return base
