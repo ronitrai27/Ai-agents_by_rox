@@ -78,23 +78,27 @@ def tavily_web_search(query: str, max_results: int = 5) -> dict:
     """Search the web using Tavily for current information, articles, and general knowledge.
     Returns a list of results with title, url, and content snippet."""
     print(f"[tavily_web_search] ▶ CALLED — query={query}")
-    response = _tavily.search(
-        query=query,
-        max_results=max_results,
-        search_depth="advanced",
-        include_raw_content=False,
-    )
-    results = [
-        {
-            "title": r.get("title", ""),
-            "url": r.get("url", ""),
-            "snippet": r.get("content", "")[:500],
-            "score": r.get("score", 0),
-        }
-        for r in response.get("results", [])
-    ]
-    print(f"[tavily_web_search] ✓ DONE — {len(results)} results")
-    return {"query": query, "results": results}
+    try:
+        response = _tavily.search(
+            query=query,
+            max_results=max_results,
+            search_depth="advanced",
+            include_raw_content=False,
+        )
+        results = [
+            {
+                "title": r.get("title", ""),
+                "url": r.get("url", ""),
+                "snippet": r.get("content", "")[:500],
+                "score": r.get("score", 0),
+            }
+            for r in response.get("results", [])
+        ]
+        print(f"[tavily_web_search] ✓ DONE — {len(results)} results")
+        return {"query": query, "results": results}
+    except Exception as e:
+        print(f"[tavily_web_search] ✗ ERROR: {e}")
+        return {"query": query, "results": [], "error": str(e)}
 
 
 @tool
@@ -102,11 +106,15 @@ def tavily_extract(url: str) -> dict:
     """Extract full content from a specific URL using Tavily.
     Use this to get the complete text of a promising article or source."""
     print(f"[tavily_extract] ▶ CALLED — url={url}")
-    response = _tavily.extract(urls=[url])
-    result = response.get("results", [{}])[0]
-    content = result.get("raw_content", "")[:3000]
-    print(f"[tavily_extract] ✓ DONE — {len(content)} chars")
-    return {"url": url, "content": content}
+    try:
+        response = _tavily.extract(urls=[url])
+        result = response.get("results", [{}])[0]
+        content = result.get("raw_content", "")[:3000]
+        print(f"[tavily_extract] ✓ DONE — {len(content)} chars")
+        return {"url": url, "content": content}
+    except Exception as e:
+        print(f"[tavily_extract] ✗ ERROR: {e}")
+        return {"url": url, "content": "", "error": str(e)}
 
 
 @tool
@@ -315,7 +323,6 @@ def supervisor(state: ResearchState) -> dict:
         f"[supervisor] messages={len(state['messages'])}, iterations={state.get('iterations', 0)}"
     )
 
-    user_id = state.get("user_id", "default_user")
     messages_list = state["messages"]
 
     # ── GUARD: passthrough after HITL ──
@@ -324,17 +331,12 @@ def supervisor(state: ResearchState) -> dict:
             print("[supervisor] Resuming after HITL — passing through silently")
             return {"messages": [AIMessage(content=msg.content)]}
 
-    # ── FETCH memory for this user ──
-    last_query = messages_list[-1].content if messages_list else ""
-    memories = _mem0.search(last_query, user_id=user_id)
-    memory_context = "\n".join(f"- {m['memory']}" for m in memories.get("results", []))
-    memory_block = (
-        f"\nWhat you know about this user:\n{memory_context}\n"
-        if memory_context
-        else ""
-    )
+    # ── mem0 persistent memory would be injected here ──
+    # Skipped for now: user is anonymous (no auth), so no user_id to scope memories.
+    # When auth is added: fetch memories via _mem0.search(query, user_id=user_id)
+    # and append as memory_block to SUPERVISOR_SYSTEM prompt.
 
-    messages = [SystemMessage(content=SUPERVISOR_SYSTEM + memory_block)] + messages_list
+    messages = [SystemMessage(content=SUPERVISOR_SYSTEM)] + messages_list
 
     llm_with_tools = _supervisor_llm.bind_tools(
         [ask_researcher_a, ask_researcher_b, create_document]
@@ -346,16 +348,6 @@ def supervisor(state: ResearchState) -> dict:
     ):
         print("[supervisor] create_document detected — silencing message content")
         response.content = "Research phase complete. Finalizing report for approval..."
-
-    # ── SAVE this interaction to memory ──
-    if messages_list and response.content:
-        _mem0.add(
-            [
-                {"role": "user", "content": last_query},
-                {"role": "assistant", "content": response.content},
-            ],
-            user_id=user_id,
-        )
 
     print(
         f"--- SUPERVISOR: DECISION MADE ({len(response.tool_calls or [])} tool(s) assigned) ---"
@@ -577,6 +569,7 @@ Instructions:
 - Insert inline citations like [1], [2] etc. after claims that match a source URL
 - Add a "## References" section at the end with all cited sources numbered
 - Do not change any content — only add citation numbers and the references section
+- Add Links if there at end of the report.
 - If a claim cannot be matched to a source, leave it uncited
 - Return only the updated report, no preamble
 

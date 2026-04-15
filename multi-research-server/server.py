@@ -92,7 +92,8 @@ async def agent_endpoint(request: Request):
     config = {"configurable": {"thread_id": thread_id}}
 
     if request_type == "run":
-        graph_input = body.get("state", None)
+        graph_input = body.get("state") or {}
+        graph_input["user_id"] = thread_id  # always inject
         print(f"[/agent] Type=run, graph_input={graph_input}")
 
     elif request_type == "resume":
@@ -122,7 +123,10 @@ async def agent_endpoint(request: Request):
     else:
         user_message = body.get("message")
         if user_message:
-            graph_input = {"messages": [HumanMessage(content=user_message)]}
+            graph_input = {
+                "messages": [HumanMessage(content=user_message)],
+                "user_id": thread_id,  # ← add this
+            }
             print(f"[/agent] Fallback message type, user_message={user_message}")
         else:
             graph_input = body.get("state", None)
@@ -180,7 +184,9 @@ async def agent_endpoint(request: Request):
                     # This prevents citation_agent's internal LLM call from appearing
                     # as a chat bubble while the approval card is pending.
                     if node_name == "hitl_document":
-                        print(f"[generate_events] node={node_name} is HITL, skipping message stream")
+                        print(
+                            f"[generate_events] node={node_name} is HITL, skipping message stream"
+                        )
                         continue
 
                     if isinstance(msg, AIMessageChunk):
