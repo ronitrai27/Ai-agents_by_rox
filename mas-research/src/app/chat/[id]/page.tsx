@@ -161,13 +161,26 @@ export default function ResearchChatPage() {
   const isDisabled = status === "running" || restoring;
 
   return (
-    <div className="flex flex-col h-screen bg-background text-neutral-100 font-mono">
+    <div className="flex flex-col h-screen bg-neutral-900 text-neutral-100 font-mono">
       {/* Header */}
-      <header className="p-4 border-b border-neutral-800 flex items-center justify-between">
-        <span className="text-xs font-bold uppercase tracking-widest">
-          Research Protocol v1.0
-        </span>
-        {status === "running" && <Spinner className="w-4 h-4" />}
+      <header className="px-4 py-4 border-b border-neutral-800 flex items-center justify-between">
+        <div>
+          <h1 className="text-lg font-semibold tracking-tight ">
+            ROX - MAS <span>(Research system)</span>
+          </h1>
+          {status === "running" ? (
+            <span className="text-primary">
+              <Spinner className="w-4 h-4" />{" "}
+            </span>
+          ) : (
+            <span className="text-primary">Active</span>
+          )}
+        </div>
+
+        <div className="flex items-center gap-4">
+          <Button size="sm">Star on Github</Button>
+          <Button size="sm">How it works</Button>
+        </div>
       </header>
 
       {/* Messages */}
@@ -235,7 +248,7 @@ export default function ResearchChatPage() {
         <div className="max-w-4xl mx-auto flex gap-2 items-start">
           <Textarea
             ref={inputRef}
-            className="flex-1 bg-transparent border border-neutral-800 p-2 min-h-[40px] focus:outline-none"
+            className="flex-1 bg-neutral-800 border border-neutral-950 p-2 h-14 focus:outline-none rounded-md"
             placeholder="Input research parameters..."
             value={inputValue}
             disabled={isDisabled}
@@ -257,8 +270,8 @@ export default function ResearchChatPage() {
             </Button>
           ) : (
             <Button
-              variant="ghost"
-              className="border border-neutral-800"
+              variant="default"
+              className="border border-neutral-800 rounded-sm"
               disabled={!inputValue.trim() || restoring}
               onClick={() => sendMessage(inputValue)}
             >

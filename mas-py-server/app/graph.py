@@ -17,13 +17,11 @@
 #   findings      — accumulated findings from subagents (list of dicts)
 #   final_report  — synthesized markdown report (string)
 #   iterations    — how many research loops have run (int, cap at MAX_ITERATIONS)
-
 import os
 import json
 import operator
 import time
 from typing import Annotated
-from typing_extensions import TypedDict
 
 from langchain_core.messages import HumanMessage, ToolMessage, SystemMessage, AIMessage
 from langchain_core.tools import tool
@@ -33,24 +31,19 @@ from langgraph.prebuilt import create_react_agent
 from langgraph.types import interrupt, Send
 from langgraph.config import get_stream_writer
 from langgraph.checkpoint.memory import InMemorySaver
+from tavily import TavilyClient
+import serpapi
+from dotenv import load_dotenv
 
-# ─── Optional imports (degrade gracefully if keys not set) ────────────────────
-try:
-    from tavily import TavilyClient
+load_dotenv()
 
-    _tavily = TavilyClient(api_key=os.getenv("TAVILY_API_KEY", ""))
-except Exception:
-    _tavily = None
+_tavily = TavilyClient(api_key=os.environ["TAVILY_API_KEY"])
+_serp_client = serpapi.Client(api_key=os.environ["SERPAPI_API_KEY"])
 
-try:
-    import serpapi
+print(f"[init] Tavily client ready")
+print(f"[init] SerpAPI client ready: {os.environ['SERPAPI_API_KEY'][:8]}...")
 
-    _serp_key = os.getenv("SERPAPI_API_KEY", "")
-except Exception:
-    _serp_key = None
-
-MAX_ITERATIONS = 3  # safety cap on research loops
-
+MAX_ITERATIONS = 3
 
 # ─────────────────────────────────────────────────────────────────────────────
 # 1.  STATE
@@ -72,7 +65,7 @@ class ResearchState(MessagesState):
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# 2.  REAL TOOLS  (executed inside subagents)
+# 2.  REAL TOOLS
 # ─────────────────────────────────────────────────────────────────────────────
 
 
@@ -80,48 +73,36 @@ class ResearchState(MessagesState):
 def tavily_web_search(query: str, max_results: int = 5) -> dict:
     """Search the web using Tavily for current information, articles, and general knowledge.
     Returns a list of results with title, url, and content snippet."""
-    print(f"[tavily_web_search] query={query}")
-    if not _tavily:
-        return {"error": "Tavily not configured", "results": []}
-    try:
-        response = _tavily.search(
-            query=query,
-            max_results=max_results,
-            search_depth="advanced",
-            include_raw_content=False,
-        )
-        results = [
-            {
-                "title": r.get("title", ""),
-                "url": r.get("url", ""),
-                "snippet": r.get("content", "")[:500],
-                "score": r.get("score", 0),
-            }
-            for r in response.get("results", [])
-        ]
-        print(f"[tavily_web_search] returned {len(results)} results")
-        return {"query": query, "results": results}
-    except Exception as e:
-        print(f"[tavily_web_search] ERROR: {e}")
-        return {"error": str(e), "results": []}
+    print(f"[tavily_web_search] ▶ CALLED — query={query}")
+    response = _tavily.search(
+        query=query,
+        max_results=max_results,
+        search_depth="advanced",
+        include_raw_content=False,
+    )
+    results = [
+        {
+            "title": r.get("title", ""),
+            "url": r.get("url", ""),
+            "snippet": r.get("content", "")[:500],
+            "score": r.get("score", 0),
+        }
+        for r in response.get("results", [])
+    ]
+    print(f"[tavily_web_search] ✓ DONE — {len(results)} results")
+    return {"query": query, "results": results}
 
 
 @tool
 def tavily_extract(url: str) -> dict:
     """Extract full content from a specific URL using Tavily.
     Use this to get the complete text of a promising article or source."""
-    print(f"[tavily_extract] url={url}")
-    if not _tavily:
-        return {"error": "Tavily not configured", "content": ""}
-    try:
-        response = _tavily.extract(urls=[url])
-        result = response.get("results", [{}])[0]
-        content = result.get("raw_content", "")[:3000]  # cap at 3k chars
-        print(f"[tavily_extract] extracted {len(content)} chars")
-        return {"url": url, "content": content}
-    except Exception as e:
-        print(f"[tavily_extract] ERROR: {e}")
-        return {"error": str(e), "content": ""}
+    print(f"[tavily_extract] ▶ CALLED — url={url}")
+    response = _tavily.extract(urls=[url])
+    result = response.get("results", [{}])[0]
+    content = result.get("raw_content", "")[:3000]
+    print(f"[tavily_extract] ✓ DONE — {len(content)} chars")
+    return {"url": url, "content": content}
 
 
 @tool
@@ -129,109 +110,79 @@ def serp_scholar_search(query: str) -> dict:
     """Search Google Scholar for academic papers and peer-reviewed research.
     Use for finding scientific studies, citations, and authoritative academic sources.
     """
-    print(f"[serp_scholar_search] query={query}")
-    if not _serp_key:
-        return {"error": "SerpAPI not configured", "results": []}
-    try:
-        from serpapi import GoogleSearch
-
-        search = GoogleSearch(
-            {
-                "q": query,
-                "engine": "google_scholar",
-                "api_key": _serp_key,
-                "num": 5,
-            }
-        )
-        data = search.get_dict()
-        results = [
-            {
-                "title": r.get("title", ""),
-                "link": r.get("link", ""),
-                "snippet": r.get("snippet", ""),
-                "year": r.get("publication_info", {}).get("summary", ""),
-            }
-            for r in data.get("organic_results", [])
-        ]
-        print(f"[serp_scholar_search] returned {len(results)} results")
-        return {"query": query, "results": results}
-    except Exception as e:
-        print(f"[serp_scholar_search] ERROR: {e}")
-        return {"error": str(e), "results": []}
+    print(f"[serp_scholar_search] ▶ CALLED — query={query}")
+    data = _serp_client.search(
+        {
+            "engine": "google_scholar",
+            "q": query,
+            "num": 5,
+        }
+    )
+    results = [
+        {
+            "title": r.get("title", ""),
+            "link": r.get("link", ""),
+            "snippet": r.get("snippet", ""),
+            "year": r.get("publication_info", {}).get("summary", ""),
+        }
+        for r in data.get("organic_results", [])
+    ]
+    print(f"[serp_scholar_search] ✓ DONE — {len(results)} results")
+    return {"query": query, "results": results}
 
 
 @tool
 def serp_patent_search(query: str) -> dict:
     """Search Google Patents for patents related to the research topic.
     Use when researching technology, inventions, or IP landscape."""
-    print(f"[serp_patent_search] query={query}")
-    if not _serp_key:
-        return {"error": "SerpAPI not configured", "results": []}
-    try:
-        from serpapi import GoogleSearch
-
-        search = GoogleSearch(
-            {
-                "q": query,
-                "engine": "google_patents",
-                "api_key": _serp_key,
-                "num": 5,
-            }
-        )
-        data = search.get_dict()
-        results = [
-            {
-                "title": r.get("title", ""),
-                "patent_id": r.get("patent_id", ""),
-                "link": r.get("pdf", ""),
-                "assignee": r.get("assignee", ""),
-                "filing_date": r.get("filing_date", ""),
-                "snippet": r.get("snippet", ""),
-            }
-            for r in data.get("organic_results", [])
-        ]
-        print(f"[serp_patent_search] returned {len(results)} results")
-        return {"query": query, "results": results}
-    except Exception as e:
-        print(f"[serp_patent_search] ERROR: {e}")
-        return {"error": str(e), "results": []}
+    print(f"[serp_patent_search] ▶ CALLED — query={query}")
+    data = _serp_client.search(
+        {
+            "engine": "google_patents",
+            "q": query,
+            "num": 5,
+        }
+    )
+    results = [
+        {
+            "title": r.get("title", ""),
+            "patent_id": r.get("patent_id", ""),
+            "link": r.get("pdf", ""),
+            "assignee": r.get("assignee", ""),
+            "filing_date": r.get("filing_date", ""),
+            "snippet": r.get("snippet", ""),
+        }
+        for r in data.get("organic_results", [])
+    ]
+    print(f"[serp_patent_search] ✓ DONE — {len(results)} results")
+    return {"query": query, "results": results}
 
 
 @tool
 def serp_news_search(query: str) -> dict:
     """Search Google News for recent news articles and current events.
     Use for fact-checking, recency verification, or breaking developments."""
-    print(f"[serp_news_search] query={query}")
-    if not _serp_key:
-        return {"error": "SerpAPI not configured", "results": []}
-    try:
-        from serpapi import GoogleSearch
-
-        search = GoogleSearch(
-            {
-                "q": query,
-                "engine": "google",
-                "tbm": "nws",
-                "api_key": _serp_key,
-                "num": 5,
-            }
-        )
-        data = search.get_dict()
-        results = [
-            {
-                "title": r.get("title", ""),
-                "link": r.get("link", ""),
-                "source": r.get("source", ""),
-                "date": r.get("date", ""),
-                "snippet": r.get("snippet", ""),
-            }
-            for r in data.get("news_results", [])
-        ]
-        print(f"[serp_news_search] returned {len(results)} results")
-        return {"query": query, "results": results}
-    except Exception as e:
-        print(f"[serp_news_search] ERROR: {e}")
-        return {"error": str(e), "results": []}
+    print(f"[serp_news_search] ▶ CALLED — query={query}")
+    data = _serp_client.search(
+        {
+            "engine": "google",
+            "tbm": "nws",
+            "q": query,
+            "num": 5,
+        }
+    )
+    results = [
+        {
+            "title": r.get("title", ""),
+            "link": r.get("link", ""),
+            "source": r.get("source", ""),
+            "date": r.get("date", ""),
+            "snippet": r.get("snippet", ""),
+        }
+        for r in data.get("news_results", [])
+    ]
+    print(f"[serp_news_search] ✓ DONE — {len(results)} results")
+    return {"query": query, "results": results}
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -343,8 +294,8 @@ SUPERVISOR_SYSTEM = """You are the Lead Researcher — a world-class research di
  - Your final report should be well-structured with sections: Executive Summary, Key Findings, Detailed Analysis, Sources.
  - Think step by step before deciding whether to continue or finalize.
  """.format(
-     max_iter=MAX_ITERATIONS
- )
+    max_iter=MAX_ITERATIONS
+)
 
 
 def supervisor(state: ResearchState) -> dict:
@@ -373,8 +324,7 @@ def supervisor(state: ResearchState) -> dict:
     # ── OVERRIDE: If calling create_document, strip content to keep chat clean ──
     # This ensures no raw report text 'leaks' into the chat bubble while HITL is pending.
     if any(
-        tc["name"] == "create_document"
-        for tc in getattr(response, "tool_calls", [])
+        tc["name"] == "create_document" for tc in getattr(response, "tool_calls", [])
     ):
         print("[supervisor] create_document detected — silencing message content")
         response.content = "Research phase complete. Finalizing report for approval..."

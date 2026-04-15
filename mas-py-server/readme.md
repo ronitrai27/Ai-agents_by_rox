@@ -27,9 +27,29 @@ You ask → Principal plans → calls both VPs in parallel → both VPs research
 
 
 ## errors
-[generate_events] task_result has no interrupts, skipping
-[generate_events] ERROR: At key 'findings': Can receive only one value per step. Use an Annotated key to handle multiple values.
-For troubleshooting, visit: https://docs.langchain.com/oss/python/langgraph/errors/INVALID_CONCURRENT_GRAPH_UPDATE
-[error_event] ERROR: At key 'findings': Can receive only one value per step. Use an Annotated key to handle multiple values.
-For troubleshooting, visit: https://docs.langchain.com/oss/python/langgraph/errors/INVALID_CONCURRENT_GRAPH_UPDATE
-[generate_events] Stream ended for thread_id=82022bf3-7245-4e0d-a7fa-97f1c85bae17
+INFO:     Finished server process [42180]
+[init] Tavily client ready
+[init] SerpAPI client ready: d7f7e6ac...
+[graph] Research MAS graph compiled successfully
+[SERVER] FastAPI app initialized
+[SERVER] FastAPI app initialized
+INFO:     Started server process [53704]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+
+means on save - eveything is loaded 
+but error came - and stream ended !
+
+[generate_events] ERROR: 400 Client Error: Bad Request for url: https://serpapi.com/search?engine=google_patents&q=patents+related+to+alien+technology+or+UFOs&num=5&api_key=d7f7e6ac4c1d658185f43db94c766526ddd8b7b4418088e4c7cd716c3d067539
+
+[error_event] ERROR: 400 Client Error: Bad Request for url: https://serpapi.com/search?engine=google_patents&q=patents+related+to+alien+technology+or+UFOs&num=5&api_key=d7f7e6ac4c1d658185f43db94c766526ddd8b7b4418088e4c7cd716c3d067539
+
+[generate_events] Stream ended for thread_id=e639ef15-7df9-4b39-8794-fe329d60e539
+
+[tavily_web_search] ✓ DONE — 5 results
+
+[tavily_web_search] ✓ DONE — 5 results
+
+[serp_news_search] ✓ DONE — 10 results
+
+[tavily_web_search] ✓ DONE — 5 results

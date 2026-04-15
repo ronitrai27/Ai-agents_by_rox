@@ -1269,6 +1269,25 @@ files = [
 requests = ">=2.0.1,<3.0.0"
 
 [[package]]
+name = "serpapi"
+version = "1.0.2"
+description = "The official Python client for SerpApi.com."
+optional = false
+python-versions = ">=3.6"
+groups = ["main"]
+files = [
+    {file = "serpapi-1.0.2-py3-none-any.whl", hash = "sha256:4edb67318918c0ff460aae118d66f76ad83ab75fbf901a77a9722b0cfe6c70aa"},
+    {file = "serpapi-1.0.2.tar.gz", hash = "sha256:06ff981129a1cb7c3706469a67f8d43e77ab295bcbdbfcb7c118d39e8efb0783"},
+]
+
+[package.dependencies]
+requests = "*"
+
+[package.extras]
+color = ["pygments"]
+test = ["pytest"]
+
+[[package]]
 name = "sniffio"
 version = "1.3.1"
 description = "Sniff out which async library your code is running under"
@@ -1320,6 +1339,23 @@ typing-extensions = {version = ">=4.10.0", markers = "python_version < \"3.13\""
 
 [package.extras]
 full = ["httpx (>=0.27.0,<0.29.0)", "itsdangerous", "jinja2", "python-multipart (>=0.0.18)", "pyyaml"]
+
+[[package]]
+name = "tavily-python"
+version = "0.7.23"
+description = "Python wrapper for the Tavily API"
+optional = false
+python-versions = ">=3.8"
+groups = ["main"]
+files = [
+    {file = "tavily_python-0.7.23-py3-none-any.whl", hash = "sha256:52ef85c44b926bce3f257570cd32bc1bd4db54666acf3105617f27411a59e188"},
+    {file = "tavily_python-0.7.23.tar.gz", hash = "sha256:3b92232e0e29ab68898b765f281bb4f2c650b02210b64affbc48e15292e96161"},
+]
+
+[package.dependencies]
+httpx = "*"
+requests = "*"
+tiktoken = ">=0.5.1"
 
 [[package]]
 name = "tenacity"
@@ -2059,4 +2095,4 @@ cffi = ["cffi (>=1.17,<2.0) ; platform_python_implementation != \"PyPy\" and pyt
 [metadata]
 lock-version = "2.1"
 python-versions = ">=3.12,<4.0"
-content-hash = "e0e3a802401ece51378acf991000ff1454c05cf81d194f687b9b90475a5a02d5"
+content-hash = "5ecc24f76079b07a85271f60e309bb75bbd299e27dad19d99a2db4e87f43f56a"
