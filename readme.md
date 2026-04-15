@@ -77,51 +77,6 @@ You ask → Principal plans → calls both VPs in parallel → both VPs research
 
 
 
-customer support agent 
-# Customer Support Agent — FastAPI + LangGraph
-
-## Architecture
-
-```
-Browser / Next.js
-    │  POST /agent  (SSE)
-    ▼
-FastAPI  server.py
-    │  graph.astream(stream_mode=["messages","updates","custom"])
-    ▼
-LangGraph Graph
-    ├─ supervisor node       ← main LLM, decides what to do
-    │      │
-    │   assign_tool()        ← conditional edge, uses Send() for fan-out
-    │      │
-    ├─ order_agent node      ← invokes ReAct subagent (get_order, list_customer_orders)
-    ├─ refund_agent node     ← invokes ReAct subagent (check_refund_eligibility, process_refund)
-    └─ update_order node     ← HITL: interrupt() → human approves → writes to DB
-```
-
-## SSE Events emitted
-
-| Event           | When                                      | Frontend use                      |
-|-----------------|-------------------------------------------|-----------------------------------|
-| `message_chunk` | Every LLM token                           | Typing effect, tool_call badges   |
-| `checkpoint`    | After each node finishes                  | Create AppCheckpoint in state     |
-| `custom`        | Mid-node via `get_stream_writer()`        | Loading spinner per subagent      |
-| `interrupt`     | When `interrupt()` is called              | Show approve/cancel HITL card     |
-| `error`         | Exception in stream                       | Error toast in UI                 |
-
-## Fake DB — orders you can test with
-
-| Order ID | Customer       | Product           | Status     | Amount    |
-|----------|----------------|-------------------|------------|-----------|
-| ORD-001  | Alice Johnson  | MacBook Pro 14    | shipped    | $2,499.99 |
-| ORD-002  | Alice Johnson  | AirPods Pro 2     | delivered  | $249.99   |
-| ORD-003  | Bob Smith      | iPhone 16 Pro     | processing | $1,199.99 |
-| ORD-004  | Bob Smith      | iPad Air M2       | delivered  | $749.99   |
-| ORD-005  | Charlie Lee    | Apple Watch Ultra | delivered  | $799.99   |
-
-## Setup
-
-```bash
 cd support_agent
 poetry run python server.py
 
