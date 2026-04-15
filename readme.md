@@ -14,26 +14,7 @@
 **Available in TypeScript AND Python. Because why choose one language when you can dominate both.**
 
 ---
- 
-⭐ **Star this repo if you're tired of wrapper tutorials.** ⭐
- 
----
- 
-```
-╔══════════════════════════════════════════════════════════════╗
-║                                                              ║
-║   📚  FOR LEARNING & TESTING PURPOSES ONLY                   ║
-║                                                              ║
-║   Got questions? Found a bug? Just wanna talk agents?        ║
-║   Feel free to reach out — always happy to connect.          ║
-║                                                              ║
-║   📧  raironit127@gmail.com                                  ║
-║   💼  linkedin.com/in/rox-aa53a1300                          ║
-║                                                              ║
-╚══════════════════════════════════════════════════════════════╝
-```
- 
----
+
 ---
  
 <!-- Agent Framework -->
@@ -56,9 +37,26 @@
 [![SerpAPI](https://img.shields.io/badge/SerpAPI-Scholar_%7C_Patents_%7C_News-4285F4?style=for-the-badge)](https://serpapi.com)
 [![Firecrawl](https://img.shields.io/badge/Firecrawl-Web_Scraping-FF6B35?style=for-the-badge)](https://firecrawl.dev)
  
-<!-- Principles -->
-[![No SDK](https://img.shields.io/badge/SDK-NONE_USED-FF4444?style=for-the-badge)](.)
-[![No Templates](https://img.shields.io/badge/UI_Templates-NONE_USED-FF4444?style=for-the-badge)](.)
+ 
+---
+ 
+⭐ **Star this repo if you're tired of wrapper tutorials.** ⭐
+ 
+---
+ 
+```
+╔══════════════════════════════════════════════════════════════╗
+║                                                              ║
+║   📚  FOR LEARNING & TESTING PURPOSES ONLY                   ║
+║                                                              ║
+║   Got questions? Found a bug? Just wanna talk agents?        ║
+║   Feel free to reach out — always happy to connect.          ║
+║                                                              ║
+║   📧  raironit127@gmail.com                                  ║
+║   💼  linkedin.com/in/rox-aa53a1300                          ║
+║                                                              ║
+╚══════════════════════════════════════════════════════════════╝
+```
  
 ---
  
@@ -85,7 +83,51 @@ It showcases **real multi-agent reasoning** using **ReAct agents**, **interrupts
 
 ---
 
+ 
+## 📁 Repository Structure
+ 
+```
+agents/
+├── assets/                        # 📸 Screenshots & diagrams
+│   ├── app1.png
+│   ├── app2.png
+│   ├── app3.png
+│   └── dia-1.png
+│
+├── my-agent-ts/                   # 🟦 LangGraph in TypeScript — fundamentals
+├── my-agent-py/                   # 🐍 LangGraph in Python — same concepts, same power
+│
+├── customer-agent-client/         # 🛍️ Next.js frontend — customer service UI
+├── customer-py-server/            # ⚙️ FastAPI backend — REACT agent + HITL
+│
+├── multi-research-client/         # 🔬 Research UI — real-time agent logs
+├── multi-research-server/         # 🧠 The beast — 4-agent research orchestrator
+│
+├── .gitignore
+├── README.md                      # You are here 📍
+├── requirements.txt
+└── tools_reference_card.html
+```
 
+
+# 🧩 Part 1 — `my-agent-ts` & `my-agent-py`
+ 
+## The Foundation. Where It All Starts.
+ 
+> Learn LangGraph the real way — by writing the graph yourself, in both languages.
+
+.env setup ->
+```dotenv
+OPENAI_API_KEY=your_key_here
+ANTHROPIC_API_KEY=your_key_here
+LANGSMITH_TRACING=true
+LANGSMITH_API_KEY=your_key_here
+LANGSMITH_PROJECT=
+
+--for client side--
+```dotenv
+NEXT_PUBLIC_AGENT_URL=http://127.0.0.1:8000  (chnage as per your domain)
+```
 
 
 
