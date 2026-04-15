@@ -36,19 +36,54 @@
 ---
 ---
  
-[![LangGraph](https://img.shields.io/badge/LangGraph-Nodes_%26_Edges-blueviolet?style=for-the-badge&logo=data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCI+PHBhdGggZmlsbD0id2hpdGUiIGQ9Ik0xMiAyQzYuNDggMiAyIDYuNDggMiAxMnM0LjQ4IDEwIDEwIDEwIDEwLTQuNDggMTAtMTBTMTcuNTIgMiAxMiAyem0tMiAxNWwtNS01IDEuNDEtMS40MUwxMCAxNC4xN2w3LjU5LTcuNTlMMTkgOGwtOSA5eiIvPjwvc3ZnPg==)](https://langchain-ai.github.io/langgraph/)
+<!-- Agent Framework -->
+[![LangGraph](https://img.shields.io/badge/LangGraph-Custom_Multi--Agents-blueviolet?style=for-the-badge&logo=data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCI+PHBhdGggZmlsbD0id2hpdGUiIGQ9Ik0xMiAyQzYuNDggMiAyIDYuNDggMiAxMnM0LjQ4IDEwIDEwIDEwIDEwLTQuNDggMTAtMTBTMTcuNTIgMiAxMiAyem0tMiAxNWwtNS01IDEuNDEtMS40MUwxMCAxNC4xN2w3LjU5LTcuNTlMMTkgOGwtOSA5eiIvPjwvc3ZnPg==)](https://langchain-ai.github.io/langgraph/)
 [![LangChain](https://img.shields.io/badge/LangChain-Powered-1C3C3C?style=for-the-badge)](https://langchain.com)
 [![LangSmith](https://img.shields.io/badge/LangSmith-Traced_%F0%9F%94%AD-orange?style=for-the-badge)](https://smith.langchain.com)
 [![Mem0](https://img.shields.io/badge/Mem0-Memory_Layer-8B5CF6?style=for-the-badge)](https://mem0.ai)
+ 
+<!-- Languages & Runtime -->
 [![TypeScript](https://img.shields.io/badge/TypeScript-YES-3178C6?style=for-the-badge&logo=typescript)](https://www.typescriptlang.org/)
 [![Python](https://img.shields.io/badge/Python-YES-FFD43B?style=for-the-badge&logo=python)](https://python.org)
 [![Next.js](https://img.shields.io/badge/Next.js-SSE_Streaming-000?style=for-the-badge&logo=next.js)](https://nextjs.org)
+ 
+<!-- LLMs -->
+[![OpenAI](https://img.shields.io/badge/OpenAI-GPT_Powered-412991?style=for-the-badge&logo=openai)](https://openai.com)
+[![Anthropic](https://img.shields.io/badge/Anthropic-Claude-CC785C?style=for-the-badge)](https://anthropic.com)
+ 
+<!-- Tools & APIs -->
+[![Tavily](https://img.shields.io/badge/Tavily-AI_Search-00C2A8?style=for-the-badge)](https://tavily.com)
+[![SerpAPI](https://img.shields.io/badge/SerpAPI-Scholar_%7C_Patents_%7C_News-4285F4?style=for-the-badge)](https://serpapi.com)
+[![Firecrawl](https://img.shields.io/badge/Firecrawl-Web_Scraping-FF6B35?style=for-the-badge)](https://firecrawl.dev)
+ 
+<!-- Principles -->
 [![No SDK](https://img.shields.io/badge/SDK-NONE_USED-FF4444?style=for-the-badge)](.)
 [![No Templates](https://img.shields.io/badge/UI_Templates-NONE_USED-FF4444?style=for-the-badge)](.)
  
 ---
  
 > **"Everyone wraps the SDK. We write the graph."**
+
+## Why This Repo Stands Out
+
+Most LangGraph examples are either basic chains or over-hyped demos with heavy abstractions.  
+
+This project is different.
+
+It showcases **real multi-agent reasoning** using **ReAct agents**, **interrupts**, **human-in-the-loop (HITL)** flows, and **custom streaming** — all connected through clean, production-minded architecture.
+
+### Key Highlights
+
+- **Dual Implementation**: Full LangGraph + LangChain + LangSmith + **Mem0** in **both TypeScript** (`my-agent-ts`) and **Python** (`my-agent-py`). Side-by-side comparison for the community.
+- **ReAct Agents with Multi-Agent Reasoning**: Agents that can think, use tools, reflect, and hand off to other specialized agents.
+- **Human-in-the-Loop (HITL)**: Real interrupt patterns for approval, correction, or escalation.
+- **Custom SSE Streaming**: Built from scratch using Next.js API routes — no LangChain SDKs, no third-party streaming wrappers.
+- **Full Observability**: LangSmith tracing enabled by default.
+- **Memory Layer**: Mem0 for persistent session context across interactions.(for demo purpose not integrated inside code).
+- **Real Tool Calling**: Tavily, Firecrawl, SerpAPI, plus custom CRUD tools.
+- **Clean Architecture**: Separate client (Next.js + pnpm) and server (Python + Poetry) layers with custom real-time log streaming.
+
+---
 
 
 
